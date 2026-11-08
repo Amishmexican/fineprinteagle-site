@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /checklist/
+
+Sitemap: https://fineprinteagle.com/sitemap.xml
