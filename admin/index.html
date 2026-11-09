@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Fine Print Eagle</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#1a110a">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body class="admin">
+<a class="skip" href="#main">Skip to the numbers</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="wordmark" href="/" aria-label="Fine Print Eagle home">
+      <img src="/assets/favicon-192.png" width="36" height="36" alt="">
+      <span>Fine Print Eagle <em class="admin-tag">Admin</em></span>
+    </a>
+    <nav class="topnav" aria-label="Admin">
+      <button id="logout" class="linklike" type="button" hidden>Log out</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Password screen -->
+  <section id="login" class="login" aria-labelledby="login-title">
+    <div class="wrap">
+      <form id="login-form" class="card login-card" novalidate>
+        <img src="/assets/eagle-head-320.jpg" width="88" height="88" alt="" class="login-eagle">
+        <p class="eyebrow">Private</p>
+        <h1 id="login-title">The Eagle&rsquo;s numbers</h1>
+        <p class="what">Where visitors come from, what they tap, and who signed up. Owner only.</p>
+        <label class="field" for="password">
+          <span>Password</span>
+          <input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
+        </label>
+        <button id="login-btn" class="btn btn-ink" type="submit">Open the dashboard</button>
+        <p id="login-msg" class="form-msg" role="alert" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="dash" class="dash" hidden aria-labelledby="dash-title">
+    <div class="wrap">
+      <div class="dash-head">
+        <div>
+          <p class="eyebrow">Fine Print Eagle</p>
+          <h1 id="dash-title">The numbers</h1>
+          <p id="updated" class="meta">&nbsp;</p>
+        </div>
+        <div class="range" role="group" aria-label="Time range">
+          <button type="button" data-range="today">Today</button>
+          <button type="button" data-range="7d" aria-pressed="true">7 days</button>
+          <button type="button" data-range="30d">30 days</button>
+          <button type="button" data-range="all">All</button>
+        </div>
+      </div>
+
+      <div id="notice" class="notice" hidden role="status" aria-live="polite"></div>
+
+      <div id="summary-area" aria-live="polite" aria-busy="true">
+        <div id="tiles" class="tiles">
+          <div class="tile"><span class="tile-label">Visitors</span><span class="tile-num" data-k="visitors">&nbsp;</span><span class="tile-sub">People who opened the site</span></div>
+          <div class="tile"><span class="tile-label">Page views</span><span class="tile-num" data-k="pageviews">&nbsp;</span><span class="tile-sub">Pages opened in total</span></div>
+          <div class="tile"><span class="tile-label">Signups</span><span class="tile-num" data-k="signups">&nbsp;</span><span class="tile-sub">Asked for the checklist</span></div>
+          <div class="tile"><span class="tile-label">Signup rate</span><span class="tile-num" data-k="rate">&nbsp;</span><span class="tile-sub">Signups per 100 visitors</span></div>
+        </div>
+
+        <div id="empty" class="empty" hidden>
+          <img src="/assets/eagle-head-320.jpg" width="96" height="96" alt="">
+          <h2>No visits yet</h2>
+          <p>Nothing has been counted in this range. Share a short link, such as <strong>fineprinteagle.com/ig</strong>, and the numbers appear here within a minute.</p>
+        </div>
+
+        <div id="charts">
+          <section class="panel" aria-labelledby="trend-title">
+            <div class="panel-head"><h2 id="trend-title">Visits over time</h2><p class="hint" id="trend-hint"></p></div>
+            <div id="trend" class="chart" role="img" aria-label="Visitors per day"></div>
+          </section>
+
+          <div class="grid-2">
+            <section class="panel" aria-labelledby="sources-title">
+              <div class="panel-head"><h2 id="sources-title">Where people come from</h2><p class="hint">By the link they tapped or the site they came from.</p></div>
+              <div id="sources"></div>
+            </section>
+            <section class="panel" aria-labelledby="clicks-title">
+              <div class="panel-head"><h2 id="clicks-title">What they click</h2><p class="hint">Buttons and links tapped on the site.</p></div>
+              <div id="clicks"></div>
+            </section>
+            <section class="panel" aria-labelledby="devices-title">
+              <div class="panel-head"><h2 id="devices-title">Phones or computers</h2></div>
+              <div id="devices"></div>
+            </section>
+            <section class="panel" aria-labelledby="countries-title">
+              <div class="panel-head"><h2 id="countries-title">Top countries</h2></div>
+              <div id="countries"></div>
+            </section>
+            <section class="panel" aria-labelledby="pages-title">
+              <div class="panel-head"><h2 id="pages-title">Pages people open</h2></div>
+              <div id="pages"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <section class="panel" aria-labelledby="signups-title" id="signups-panel">
+        <div class="panel-head panel-head-actions">
+          <div>
+            <h2 id="signups-title">Who signed up</h2>
+            <p class="hint" id="signups-hint">Everyone who asked for the checklist, newest first. &ldquo;Confirmed&rdquo; means they clicked the link in Kit&rsquo;s email.</p>
+          </div>
+          <div class="actions-row">
+            <button id="copy-emails" class="btn btn-ghost small" type="button">Copy all emails</button>
+            <button id="download-csv" class="btn btn-ghost small" type="button">Download CSV</button>
+          </div>
+        </div>
+        <p id="kit-note" class="kit-note" hidden></p>
+        <div id="signups" class="table-wrap"></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel" aria-labelledby="yt-title">
+          <div class="panel-head"><h2 id="yt-title">YouTube</h2><p class="hint" id="yt-hint">Views per video, from YouTube&rsquo;s public feed.</p></div>
+          <div id="youtube"></div>
+        </section>
+        <section class="panel" aria-labelledby="platforms-title">
+          <div class="panel-head"><h2 id="platforms-title">Other platforms</h2><p class="hint">Followers and reel views live in each app&rsquo;s own stats. These open them.</p></div>
+          <ul class="platform-links">
+            <li><a href="https://studio.youtube.com/channel/UCFMhokGvGqSnQUtdXCFwqlg/analytics" rel="noopener" target="_blank">YouTube Studio analytics</a><span>Subscribers, views, watch time</span></li>
+            <li><a href="https://www.instagram.com/accounts/insights/" rel="noopener" target="_blank">Instagram insights</a><span>Open on the phone with the account logged in</span></li>
+            <li><a href="https://business.facebook.com/latest/insights/overview" rel="noopener" target="_blank">Meta Business Suite insights</a><span>Facebook Page and Instagram together</span></li>
+            <li><a href="https://www.tiktok.com/tiktokstudio/analytics" rel="noopener" target="_blank">TikTok Studio analytics</a><span>Followers and video views</span></li>
+            <li><a href="https://app.kit.com/subscribers" rel="noopener" target="_blank">Kit subscribers</a><span>The full email list</span></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="legal">This page is private and not linked from the site. Numbers are counted without cookies; see the <a href="/privacy/">privacy policy</a>.</p>
+  </div>
+</footer>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<script src="/assets/config.js"></script>
+<script src="/assets/admin.js" defer></script>
+</body>
+</html>

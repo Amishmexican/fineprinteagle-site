@@ -1,5 +1,10 @@
 User-agent: *
 Allow: /
 Disallow: /checklist/
+Disallow: /admin/
+Disallow: /yt/
+Disallow: /ig/
+Disallow: /fb/
+Disallow: /tt/
 
 Sitemap: https://fineprinteagle.com/sitemap.xml
