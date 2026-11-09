@@ -40,7 +40,7 @@
         <img src="/assets/eagle-head-320.jpg" width="88" height="88" alt="" class="login-eagle">
         <p class="eyebrow">Private</p>
         <h1 id="login-title">The Eagle&rsquo;s numbers</h1>
-        <p class="what">Where visitors come from, what they tap, and who signed up. Owner only.</p>
+        <p class="what">Followers on each app, where visitors come from, what they tap, and who signed up. Owner only.</p>
         <label class="field" for="password">
           <span>Password</span>
           <input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
@@ -58,17 +58,41 @@
         <div>
           <p class="eyebrow">Fine Print Eagle</p>
           <h1 id="dash-title">The numbers</h1>
-          <p id="updated" class="meta">&nbsp;</p>
-        </div>
-        <div class="range" role="group" aria-label="Time range">
-          <button type="button" data-range="today">Today</button>
-          <button type="button" data-range="7d" aria-pressed="true">7 days</button>
-          <button type="button" data-range="30d">30 days</button>
-          <button type="button" data-range="all">All</button>
         </div>
       </div>
 
       <div id="notice" class="notice" hidden role="status" aria-live="polite"></div>
+
+      <!-- Your channels: followers and views on each app, from the daily snapshot -->
+      <section id="channels-section" class="dash-section" aria-labelledby="channels-title">
+        <div class="section-head">
+          <div>
+            <h2 id="channels-title">Your channels</h2>
+            <p class="meta" id="channels-hint">Followers and views on each app, checked every morning.</p>
+          </div>
+          <button id="refresh-platforms" class="btn btn-ghost small" type="button">Refresh now</button>
+        </div>
+        <div id="channels" class="channels" aria-live="polite" aria-busy="true"></div>
+        <section class="panel" aria-labelledby="posts-title" id="posts-panel">
+          <div class="panel-head"><h2 id="posts-title">Top posts</h2><p class="hint" id="posts-hint">Most-viewed posts across the connected apps, from the latest check.</p></div>
+          <div id="posts" class="table-wrap"></div>
+        </section>
+      </section>
+
+      <!-- Your website: visits counted on fineprinteagle.com -->
+      <section class="dash-section" aria-labelledby="site-title">
+        <div class="section-head">
+          <div>
+            <h2 id="site-title">Your website</h2>
+            <p id="updated" class="meta">&nbsp;</p>
+          </div>
+          <div class="range" role="group" aria-label="Time range">
+            <button type="button" data-range="today">Today</button>
+            <button type="button" data-range="7d" aria-pressed="true">7 days</button>
+            <button type="button" data-range="30d">30 days</button>
+            <button type="button" data-range="all">All</button>
+          </div>
+        </div>
 
       <div id="summary-area" aria-live="polite" aria-busy="true">
         <div id="tiles" class="tiles">
@@ -115,6 +139,8 @@
         </div>
       </div>
 
+      </section>
+
       <section class="panel" aria-labelledby="signups-title" id="signups-panel">
         <div class="panel-head panel-head-actions">
           <div>
@@ -124,28 +150,13 @@
           <div class="actions-row">
             <button id="copy-emails" class="btn btn-ghost small" type="button">Copy all emails</button>
             <button id="download-csv" class="btn btn-ghost small" type="button">Download CSV</button>
+            <a class="open-app" href="https://app.kit.com/subscribers" rel="noopener" target="_blank">Open Kit</a>
           </div>
         </div>
         <p id="kit-note" class="kit-note" hidden></p>
         <div id="signups" class="table-wrap"></div>
       </section>
 
-      <div class="grid-2">
-        <section class="panel" aria-labelledby="yt-title">
-          <div class="panel-head"><h2 id="yt-title">YouTube</h2><p class="hint" id="yt-hint">Views per video, from YouTube&rsquo;s public feed.</p></div>
-          <div id="youtube"></div>
-        </section>
-        <section class="panel" aria-labelledby="platforms-title">
-          <div class="panel-head"><h2 id="platforms-title">Other platforms</h2><p class="hint">Followers and reel views live in each app&rsquo;s own stats. These open them.</p></div>
-          <ul class="platform-links">
-            <li><a href="https://studio.youtube.com/channel/UCFMhokGvGqSnQUtdXCFwqlg/analytics" rel="noopener" target="_blank">YouTube Studio analytics</a><span>Subscribers, views, watch time</span></li>
-            <li><a href="https://www.instagram.com/accounts/insights/" rel="noopener" target="_blank">Instagram insights</a><span>Open on the phone with the account logged in</span></li>
-            <li><a href="https://business.facebook.com/latest/insights/overview" rel="noopener" target="_blank">Meta Business Suite insights</a><span>Facebook Page and Instagram together</span></li>
-            <li><a href="https://www.tiktok.com/tiktokstudio/analytics" rel="noopener" target="_blank">TikTok Studio analytics</a><span>Followers and video views</span></li>
-            <li><a href="https://app.kit.com/subscribers" rel="noopener" target="_blank">Kit subscribers</a><span>The full email list</span></li>
-          </ul>
-        </section>
-      </div>
     </div>
   </section>
 </main>

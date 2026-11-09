@@ -6,7 +6,7 @@
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
-  var state = { range: "7d", tz: "America/Chicago", summary: null, signups: null, youtube: null, token: null };
+  var state = { range: "7d", tz: "America/Chicago", summary: null, signups: null, platforms: null, token: null };
 
   /* ---------- labels in plain English ---------- */
   var SOURCE_LABELS = {
@@ -128,7 +128,7 @@
     notice("");
     loadSummary();
     loadSignups();
-    loadYouTube();
+    loadPlatforms();
   }
 
   /* ---------- summary ---------- */
@@ -235,9 +235,14 @@
       html += '<rect class="bar-hit" data-i="' + i + '" x="' + (padL + i * slot) + '" y="' + padT + '" width="' + slot + '" height="' + innerH + '"/>';
       if (i === peakIdx && s.visitors) html += '<text class="peak" x="' + (x + bw / 2) + '" y="' + (y - 6) + '" text-anchor="middle">' + s.visitors + "</text>";
     });
-    var every = series.length > 16 ? Math.ceil(series.length / 8) : (series.length > 8 ? 2 : 1);
+    // X labels: space them by how wide they are, so they never overlap on a phone (e.g. "9 pm" / "11 pm").
+    var labelW = Math.max.apply(null, series.map(function (s) { return String(s.label).length; })) * 6.6 + 10;
+    var every = Math.max(1, Math.ceil(labelW / slot));
+    if (unit === "hour") every = [1, 2, 3, 4, 6, 8, 12].filter(function (k) { return k >= every; })[0] || 12;
     series.forEach(function (s, i) {
-      if (i % every !== 0 && i !== series.length - 1) return;
+      var isLast = i === series.length - 1;
+      // Off-step labels are skipped; the last one is kept only when it has a full label's room after the previous one.
+      if (i % every !== 0 && !(isLast && (i % every) * slot >= labelW)) return;
       html += '<text class="axis" x="' + (padL + i * slot + slot / 2) + '" y="' + (H - 8) + '" text-anchor="middle" fill="#b3a17b" font-size="12">' + esc(s.label) + "</text>";
     });
     html += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + (padT + innerH) + '" y2="' + (padT + innerH) + '" stroke="rgba(217,168,74,.5)"/>';
@@ -310,29 +315,180 @@
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   });
 
-  /* ---------- YouTube ---------- */
-  function loadYouTube() {
-    var el = $("#youtube"); el.innerHTML = '<div class="skel"></div><div class="skel" style="width:60%"></div>';
-    return api("/api/youtube").then(function (data) { state.youtube = data; renderYouTube(data); }).catch(function (err) {
+  /* ---------- Your channels (daily platform snapshots) ---------- */
+  var PLATFORMS = [
+    { id: "youtube", name: "YouTube", unit: "subscriber", posts: "Videos", views: "Views", app: "https://studio.youtube.com/channel/UCFMhokGvGqSnQUtdXCFwqlg/analytics",
+      profile: "https://www.youtube.com/channel/UCFMhokGvGqSnQUtdXCFwqlg", needs: "Needs a YouTube API key." },
+    { id: "instagram", name: "Instagram", unit: "follower", posts: "Posts", views: "Post views", app: "https://www.instagram.com/accounts/insights/",
+      profile: "https://www.instagram.com/fineprinteagle/", needs: "Needs an Instagram access token from the Meta app." },
+    { id: "facebook", name: "Facebook", unit: "follower", posts: "Reels", views: "Reel views", app: "https://business.facebook.com/latest/insights/overview",
+      profile: "https://www.facebook.com/fine.print.eagle", needs: "Needs the Page ID and a Page token from the Meta app." },
+    { id: "tiktok", name: "TikTok", unit: "follower", posts: "Videos", views: "Views", app: "https://www.tiktok.com/tiktokstudio/analytics",
+      profile: "https://www.tiktok.com/@fineprinteagle", needs: "Public numbers are switched off." },
+  ];
+  var PLATFORM_BY_ID = {}; PLATFORMS.forEach(function (p) { PLATFORM_BY_ID[p.id] = p; });
+  function plural(v, word) { return word + (v === 1 ? "" : "s"); }
+  function dayLabel(day) { return new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" }); }
+  function signed(v) { return (v > 0 ? "+" : v < 0 ? "−" : "±") + n(Math.abs(v)); }
+  function minutes(sec) { var m = Math.max(1, Math.ceil(sec / 60)); return m + " minute" + (m === 1 ? "" : "s"); }
+
+  function loadPlatforms() {
+    var el = $("#channels"); el.setAttribute("aria-busy", "true");
+    el.innerHTML = PLATFORMS.map(function (p) {
+      return '<article class="channel loading-card"><div class="channel-head"><h3 class="channel-name">' + esc(p.name) + '</h3></div><div class="skel" style="width:50%;height:30px!important"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:65%"></div></article>';
+    }).join("");
+    $("#posts").innerHTML = '<div class="skel"></div><div class="skel" style="width:80%"></div>';
+    return api("/api/platforms").then(function (data) { state.platforms = data; renderPlatforms(data); }).catch(function (err) {
       if (unauthorized(err)) return;
-      el.innerHTML = '<p class="none">Couldn’t load YouTube numbers right now.</p>';
+      el.setAttribute("aria-busy", "false");
+      el.innerHTML = PLATFORMS.map(function (p) { return offCard(p, "Couldn’t load", "The data service did not answer. Try again in a minute."); }).join("");
+      $("#posts").innerHTML = '<p class="none">No post numbers right now.</p>';
     });
   }
-  function renderYouTube(d) {
-    var el = $("#youtube"); var vids = d.videos || [];
-    var hint = $("#yt-hint");
-    if (d.error && !vids.length) {
-      hint.textContent = "YouTube’s public feed did not answer (" + d.error + "). Open YouTube Studio for the live numbers.";
-      el.innerHTML = '<p class="none">No video numbers right now. <a href="https://studio.youtube.com/channel/' + esc(d.channel_id) + '/analytics" rel="noopener" target="_blank">Open YouTube Studio</a>.</p>';
+
+  function appLink(meta) {
+    return '<a class="open-app channel-app" href="' + esc(meta.app) + '" rel="noopener" target="_blank" aria-label="Open ' + esc(meta.name) + ' in its app">Open in app</a>';
+  }
+  function offCard(p, title, sub) {
+    return '<article class="channel is-off" data-platform="' + p.id + '" data-state="off"><div class="channel-head"><h3 class="channel-name">' + esc(p.name) + "</h3></div>" +
+      '<p class="off-title">' + esc(title) + '</p><p class="off-sub">' + esc(sub) + "</p>" + appLink(p) + "</article>";
+  }
+
+  function changeLine(ch, unitWord) {
+    if (!ch) return null;
+    var cls = ch.value > 0 ? "up" : ch.value < 0 ? "down" : "";
+    var when = ch.partial ? "since " + dayLabel(ch.since) : "vs 7 days ago";
+    return '<p class="change ' + cls + '"><b>' + signed(ch.value) + "</b> " + esc(unitWord ? unitWord + " " : "") + esc(when) + "</p>";
+  }
+
+  function sparkline(p, meta) {
+    var pts = (p.series || []).filter(function (s) { return s.followers != null; });
+    if (pts.length < 2) return "";
+    var W = 200, H = 38, pad = 4;
+    var t0 = Date.parse(pts[0].day + "T00:00:00Z"), t1 = Date.parse(pts[pts.length - 1].day + "T00:00:00Z");
+    var span = Math.max(1, t1 - t0);
+    var vals = pts.map(function (s) { return s.followers; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    var xy = pts.map(function (s) {
+      var x = pad + ((Date.parse(s.day + "T00:00:00Z") - t0) / span) * (W - pad * 2);
+      var y = pad + (1 - (s.followers - lo) / (hi - lo)) * (H - pad * 2);
+      return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+    });
+    var line = xy.map(function (q) { return q[0] + "," + q[1]; }).join(" ");
+    var area = "M" + xy[0][0] + "," + (H - 1) + " L" + line.replace(/ /g, " L") + " L" + xy[xy.length - 1][0] + "," + (H - 1) + " Z";
+    var last = xy[xy.length - 1];
+    var hits = xy.map(function (q, i) {
+      var left = i === 0 ? 0 : (xy[i - 1][0] + q[0]) / 2, right = i === xy.length - 1 ? W : (q[0] + xy[i + 1][0]) / 2;
+      return '<rect class="hit" data-i="' + i + '" x="' + left + '" y="0" width="' + Math.max(1, right - left) + '" height="' + H + '"/>';
+    }).join("");
+    return '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" data-platform="' + p.id + '" role="img" aria-label="' +
+      esc(meta.name + " " + meta.unit + "s per day: " + pts.map(function (s) { return dayLabel(s.day) + " " + s.followers; }).join(", ")) + '">' +
+      '<path class="area" d="' + area + '"/><polyline class="line" points="' + line + '" vector-effect="non-scaling-stroke"/>' +
+      '<circle class="end" cx="' + last[0] + '" cy="' + last[1] + '" r="3.5" vector-effect="non-scaling-stroke"/>' + hits + "</svg>";
+  }
+
+  function channelCard(p) {
+    var meta = PLATFORM_BY_ID[p.id] || { id: p.id, name: cap(p.id), unit: "follower", posts: "Posts", views: "Views", app: "#", needs: "" };
+    if (p.state === "not_connected") return offCard(meta, "Not connected yet", meta.needs);
+    if (p.state === "pending") return offCard(meta, "Not connected yet", "Set up. Numbers arrive with the next check; tap Refresh now to check sooner.");
+    if (p.state === "error" || !p.latest) {
+      if (p.id === "tiktok") return offCard(meta, "Not connected yet", "TikTok isn’t sharing its public numbers with our server right now. Official access comes later.");
+      return offCard(meta, "Not connected yet", "The last check didn’t work" + (p.last_error ? ": " + p.last_error : "."));
+    }
+    var L = p.latest, c7 = p.change_7d || {};
+    var html = '<article class="channel" data-platform="' + p.id + '" data-state="ok"><div class="channel-head"><h3 class="channel-name">' + esc(meta.name) +
+      "</h3></div>";
+    html += '<p class="channel-num" data-k="followers">' + (L.followers == null ? "–" : n(L.followers)) + '</p><p class="channel-unit">' + esc(plural(L.followers, meta.unit)) + "</p>";
+    html += changeLine(c7.followers) || '<p class="change">History starts ' + esc(dayLabel((p.series[0] || L).day)) + "</p>";
+    html += sparkline(p, meta);
+    var useLikes = L.total_views == null && L.total_likes != null;
+    var bigLabel = useLikes ? "Likes" : meta.views, bigVal = useLikes ? L.total_likes : L.total_views;
+    var bigCh = useLikes ? c7.total_likes : c7.total_views;
+    html += '<dl class="channel-stats"><div><dt>' + esc(bigLabel) + '</dt><dd data-k="views">' + (bigVal == null ? "–" : n(bigVal)) +
+      (bigCh ? "<small>" + esc(signed(bigCh.value)) + (bigCh.partial ? " since " + esc(dayLabel(bigCh.since)) : " in 7 days") + "</small>" : "") + "</dd></div>" +
+      "<div><dt>" + esc(meta.posts) + '</dt><dd data-k="posts">' + (L.post_count == null ? "–" : n(L.post_count)) + "</dd></div></dl>";
+    var notes = [];
+    if (p.method === "public_profile") notes.push('<span class="pill unknown">Public numbers</span>may break if TikTok changes its page.');
+    if (p.last_error) notes.push("Last check didn’t work (" + esc(p.last_error) + "); showing " + esc(dayLabel(L.day)) + ".");
+    else if (L.day !== state.platforms.today) notes.push("Last updated " + esc(dayLabel(L.day)) + ".");
+    if (p.token && p.token.expires_at) {
+      var daysLeft = Math.floor((Date.parse(p.token.expires_at) - Date.now()) / 86400000);
+      if (daysLeft < 10) notes.push("Access runs out " + esc(fmtDate(p.token.expires_at)) + ". Make a new token (see DEPLOY.md).");
+    }
+    if (notes.length) html += '<p class="channel-note">' + notes.join(" ") + "</p>";
+    return html + appLink(meta) + "</article>";
+  }
+
+  function renderPlatforms(d) {
+    var el = $("#channels"); el.setAttribute("aria-busy", "false");
+    var list = d.platforms || [];
+    el.innerHTML = list.map(channelCard).join("");
+    bindSparks(el, list);
+
+    var anyOn = list.some(function (p) { return p.state === "ok"; });
+    var hint = "Followers and views on each app, checked every morning around 5 am Central.";
+    if (d.last_run && d.last_run.at) hint += " Last check " + fmtDateTime(d.last_run.at) + ".";
+    if (!anyOn) hint = "None of the apps are connected yet. Each card says what it needs; the steps are in the worker’s DEPLOY.md.";
+    $("#channels-hint").textContent = hint;
+    setRefreshButton(d.refresh_available_in || 0);
+
+    var posts = d.top_posts || [];
+    var hintEl = $("#posts-hint");
+    if (!posts.length) {
+      hintEl.textContent = "Most-viewed posts across the connected apps.";
+      $("#posts").innerHTML = '<p class="none">' + (anyOn ? "No posts with numbers yet." : "Post numbers appear here once an app is connected.") + "</p>";
       return;
     }
-    hint.textContent = (d.channel ? d.channel + ": " : "") + n(d.total_views) + " views across " + vids.length + " video" + (vids.length === 1 ? "" : "s") + (d.subscribers != null ? ", " + n(d.subscribers) + " subscribers" : "") + ". From YouTube’s public feed, refreshed hourly" + (d.fetched_at ? " (last " + fmtDateTime(d.fetched_at) + ")" : "") + ".";
-    if (!vids.length) { el.innerHTML = '<p class="none">The feed lists no videos yet. YouTube can take a while to add new Shorts.</p>'; return; }
-    el.innerHTML = '<ul class="videos">' + vids.map(function (v) {
-      return '<li><a class="video" href="' + esc(v.url) + '" rel="noopener" target="_blank">' + (v.thumbnail ? '<img src="' + esc(v.thumbnail) + '" alt="" loading="lazy">' : "<span></span>") +
-        '<span class="t">' + esc(v.title) + "<small>" + esc(fmtDate(v.published)) + "</small></span><span class=\"v\">" + n(v.views) + "<small>views</small></span></a></li>";
-    }).join("") + "</ul>";
+    hintEl.textContent = "Most-viewed posts across the connected apps, from the latest check. “–” means the app doesn’t share that number.";
+    var cell = function (v, unit) { return '<td class="num" data-unit="' + esc(v === 1 ? unit.replace(/s$/, "") : unit) + '">' + (v == null ? "–" : n(v)) + "</td>"; };
+    $("#posts").innerHTML = '<table class="data posts"><thead><tr><th>Post</th><th>App</th><th class="num">Views</th><th class="num">Likes</th><th class="num">Comments</th><th>Posted</th></tr></thead><tbody>' +
+      posts.map(function (r) {
+        var meta = PLATFORM_BY_ID[r.platform] || { name: cap(r.platform) };
+        var title = r.title || "(no caption)";
+        var link = r.url ? '<a class="post-link" href="' + esc(r.url) + '" rel="noopener" target="_blank">' + esc(title) + "</a>" : esc(title);
+        return '<tr data-platform="' + esc(r.platform) + '"><td class="post">' + link + '<small class="post-meta">' + esc(meta.name) + (r.published_at ? " · " + esc(fmtDate(r.published_at, { year: undefined })) : "") + "</small></td>" +
+          '<td class="platform">' + esc(meta.name) + "</td>" + cell(r.views, "views") + cell(r.likes, "likes") + cell(r.comments, "comments") +
+          '<td class="date">' + esc(r.published_at ? fmtDate(r.published_at) : "–") + "</td></tr>";
+      }).join("") + "</tbody></table>";
   }
+
+  function bindSparks(root, list) {
+    var tip = $("#tooltip");
+    $$(".spark", root).forEach(function (svg) {
+      var p = list.filter(function (x) { return x.id === svg.getAttribute("data-platform"); })[0];
+      var meta = PLATFORM_BY_ID[p.id];
+      var pts = (p.series || []).filter(function (s) { return s.followers != null; });
+      function show(e) {
+        var i = e.target.getAttribute && e.target.getAttribute("data-i"); if (i == null) return hide();
+        var s = pts[+i]; if (!s) return;
+        tip.hidden = false; tip.innerHTML = "<strong>" + esc(dayLabel(s.day)) + "</strong>" + n(s.followers) + " " + esc(plural(s.followers, meta.unit));
+        var r = svg.getBoundingClientRect(); var hit = e.target.getBoundingClientRect();
+        tip.style.left = (hit.left + hit.width / 2) + "px"; tip.style.top = r.top + "px";
+      }
+      function hide() { tip.hidden = true; }
+      svg.addEventListener("mousemove", show); svg.addEventListener("click", show); svg.addEventListener("mouseleave", hide);
+    });
+  }
+
+  var refreshTimer = null;
+  function setRefreshButton(waitSec) {
+    var btn = $("#refresh-platforms"); clearTimeout(refreshTimer);
+    btn.disabled = false; btn.textContent = "Refresh now";
+    btn.title = waitSec > 0 ? "Checked recently. Available again in " + minutes(waitSec) + "." : "Check every app now";
+  }
+  $("#refresh-platforms").addEventListener("click", function () {
+    var btn = this; btn.disabled = true; btn.textContent = "Checking…";
+    api("/api/platforms/refresh", { method: "POST" }).then(function (data) {
+      state.platforms = data; renderPlatforms(data);
+      btn.textContent = "Checked just now"; refreshTimer = setTimeout(function () { setRefreshButton(600); }, 2500);
+    }).catch(function (err) {
+      if (unauthorized(err)) return;
+      btn.disabled = false; btn.textContent = "Refresh now";
+      if (err.status === 429) $("#channels-hint").textContent = "Checked a few minutes ago. You can refresh again in " + minutes((err.data && err.data.retry_after) || 600) + ".";
+      else $("#channels-hint").textContent = "Couldn’t refresh just now. " + (err.status ? err.message : "The data service did not answer.");
+    });
+  });
 
   /* ---------- start ---------- */
   state.token = loadToken();
