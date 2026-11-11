@@ -338,11 +338,13 @@
       return '<article class="channel loading-card"><div class="channel-head"><h3 class="channel-name">' + esc(p.name) + '</h3></div><div class="skel" style="width:50%;height:30px!important"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:65%"></div></article>';
     }).join("");
     $("#posts").innerHTML = '<div class="skel"></div><div class="skel" style="width:80%"></div>';
+    whereLoading();
     return api("/api/platforms").then(function (data) { state.platforms = data; renderPlatforms(data); }).catch(function (err) {
       if (unauthorized(err)) return;
       el.setAttribute("aria-busy", "false");
       el.innerHTML = PLATFORMS.map(function (p) { return offCard(p, "Couldn’t load", "The data service did not answer. Try again in a minute."); }).join("");
       $("#posts").innerHTML = '<p class="none">No post numbers right now.</p>';
+      whereError("Couldn’t load the country numbers. The data service did not answer.");
     });
   }
 
@@ -425,6 +427,7 @@
     var list = d.platforms || [];
     el.innerHTML = list.map(channelCard).join("");
     bindSparks(el, list);
+    renderCountries(d.countries);
 
     var anyOn = list.some(function (p) { return p.state === "ok"; });
     var hint = "Followers and views on each app, checked every morning around 5 am Central.";
@@ -469,6 +472,161 @@
       function hide() { tip.hidden = true; }
       svg.addEventListener("mousemove", show); svg.addEventListener("click", show); svg.addEventListener("mouseleave", hide);
     });
+  }
+
+  /* ---------- Where your followers are (countries per app) ---------- */
+  var WHERE = {
+    youtube: { basis: "Where your views come from, last 28 days", unit: "view",
+      needs: "YouTube’s country report needs a one-time owner sign-in (see DEPLOY.md). Your other numbers aren’t affected." },
+    instagram: { basis: "Followers by country", unit: "follower", needs: "Needs an Instagram access token from the Meta app." },
+    facebook: { basis: "Page followers by country", unit: "follower", needs: "Needs the Page ID and a Page token from the Meta app." },
+    tiktok: { basis: "Share of followers by country", unit: "follower", needs: "" },
+  };
+  function sharePct(s) {
+    if (s == null) return "–";
+    var v = s * 100;
+    return (v > 0 && v < 1 ? "<1" : v >= 10 ? Math.round(v).toLocaleString("en-US") : (Math.round(v * 10) / 10).toLocaleString("en-US")) + "%";
+  }
+  function listNames(ids) {
+    var names = ids.map(function (id) { return (PLATFORM_BY_ID[id] || { name: cap(id) }).name; });
+    return names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  function whereLoading() {
+    var box = $("#where"); box.setAttribute("aria-busy", "true");
+    $("#where-all").innerHTML = '<div class="skel"></div><div class="skel" style="width:75%"></div><div class="skel" style="width:55%"></div>';
+    $("#where-apps").innerHTML = PLATFORMS.map(function (p) {
+      return '<article class="channel where-card loading-card"><div class="channel-head"><h3 class="channel-name">' + esc(p.name) + '</h3></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:60%"></div></article>';
+    }).join("");
+  }
+
+  function whereOffCard(meta, state, title, sub, extra) {
+    return '<article class="channel where-card is-off" data-platform="' + meta.id + '" data-state="' + esc(state) + '"><div class="channel-head"><h3 class="channel-name">' + esc(meta.name) + "</h3></div>" +
+      '<p class="off-title">' + esc(title) + '</p><p class="off-sub">' + esc(sub) + "</p>" + (extra || "") + "</article>";
+  }
+
+  function whereError(message) {
+    $("#where").setAttribute("aria-busy", "false");
+    $("#where-all").innerHTML = '<p class="none">' + esc(message) + "</p>";
+    $("#where-apps").innerHTML = PLATFORMS.map(function (p) { return whereOffCard(p, "off", "Couldn’t load", "The data service did not answer. Try again in a minute."); }).join("");
+  }
+
+  // One list of countries with a proportional bar (same look as the website's Top countries).
+  function whereRows(rows, label, map) {
+    var max = Math.max.apply(null, rows.map(function (r) { return map(r).bar || 0; })) || 1;
+    return '<ol class="rows where-rows" aria-label="' + esc(label) + '">' + rows.map(function (r) {
+      var m = map(r); var w = Math.max(2, Math.round(((m.bar || 0) / max) * 100));
+      return '<li class="row" style="--w:' + w + '%" data-country="' + esc(r.country) + '"><span class="name">' + esc(countryName(r.country)) + (m.sub ? "<small>" + esc(m.sub) + "</small>" : "") +
+        '</span><span class="num">' + esc(m.num) + (m.unit ? "<small>" + esc(m.unit) + "</small>" : "") + "</span></li>";
+    }).join("") + "</ol>";
+  }
+
+  function whereCard(c) {
+    var meta = PLATFORM_BY_ID[c.id] || { id: c.id, name: cap(c.id) };
+    var w = WHERE[c.id] || { basis: "Audience by country", unit: "follower", needs: "" };
+    var f = c.followers, min = (state.platforms && state.platforms.countries && state.platforms.countries.min_followers) || 100;
+    var have = f == null ? "" : " (you have " + n(f) + ")";
+    var hasRows = c.rows && c.rows.length;
+    var when = checkedLine(c);
+    var foot = when ? '<p class="where-checked">' + esc(when) + "</p>" : "";
+    var whereOff = function (m, st, title, sub) { return whereOffCard(m, st, title, sub, st === "not_connected" || st === "pending" ? "" : foot); };
+
+    if (c.state === "not_connected") return whereOff(meta, c.state, "Not connected yet", w.needs);
+    if (c.state === "pending") {
+      if (c.id === "tiktok") return whereOff(meta, c.state, "No entry yet", "Checked every Friday from TikTok Studio. The countries show up here after the first check.");
+      return whereOff(meta, c.state, "Not checked yet", "Set up. Countries arrive with the next morning check; tap Refresh now to check sooner.");
+    }
+    if (c.state === "below_threshold") {
+      if (c.id === "instagram") return whereOff(meta, c.state, "Not yet", "Instagram shares follower countries once you reach " + n(min) + " followers" + have + ".");
+      return whereOff(meta, c.state, "Not yet", "Facebook shares follower countries once your Page reaches " + n(min) + " followers" + have + ".");
+    }
+    if (c.state === "empty") {
+      if (c.id === "youtube") return whereOff(meta, c.state, "No countries yet", "YouTube hasn’t reported any countries for the last 28 days. It hides countries with only a few views.");
+      if (c.id === "facebook" && !f) return whereOff(meta, c.state, "No followers yet", "Countries show up here once people follow the Page.");
+      if (c.id === "tiktok") return whereOff(meta, c.state, "No countries yet", "TikTok Studio had no country numbers at the last check.");
+      return whereOff(meta, c.state, "No countries yet", meta.name + " didn’t share any countries at the last check.");
+    }
+    var problem = c.state === "reconnect"
+      ? "YouTube’s permission was removed or ran out. Sign in again to bring the country report back (steps in DEPLOY.md)."
+      : c.state === "error" ? "The last check didn’t work" + (c.error ? ": " + c.error : ".") : "";
+    if (!hasRows) {
+      if (!problem) return whereOff(meta, c.state, "No countries yet", meta.name + " didn’t share any countries at the last check.");
+      return whereOff(meta, c.state, c.state === "reconnect" ? "Needs a new sign-in" : "Couldn’t check", problem);
+    }
+
+    var html = '<article class="channel where-card" data-platform="' + meta.id + '" data-state="' + esc(c.state) + '"><div class="channel-head"><h3 class="channel-name">' + esc(meta.name) +
+      '</h3><p class="where-basis">' + esc(w.basis) + "</p></div>";
+    if (problem) html += '<p class="where-alert" role="note">' + esc(problem + " Showing the list from " + dayLabel(c.day) + ".") + "</p>";
+    html += whereRows(c.rows, meta.name + ": " + w.basis, function (r) {
+      if (c.id === "tiktok") return { bar: r.share, num: sharePct(r.share), unit: "of followers" };
+      if (c.id === "youtube") {
+        var bits = [];
+        if (r.subs_gained) bits.push("+" + n(r.subs_gained) + " " + plural(r.subs_gained, "subscriber"));
+        if (r.minutes != null) bits.push(n(r.minutes) + " " + plural(r.minutes, "minute") + " watched");
+        return { bar: r.value, num: n(r.value), unit: plural(r.value, "view") + " · " + sharePct(r.share), sub: bits.join(" · ") };
+      }
+      return { bar: r.value, num: n(r.value), unit: plural(r.value, "follower") + " · " + sharePct(r.share) };
+    });
+    if (c.more_countries) {
+      var tail = c.id === "tiktok" ? sharePct(c.more_share) : n(c.more_value) + " " + plural(c.more_value, w.unit);
+      html += '<p class="where-more">+ ' + n(c.more_countries) + " more " + (c.more_countries === 1 ? "country" : "countries") + " (" + esc(tail) + ")</p>";
+    }
+    var notes = [];
+    if (c.id === "youtube") {
+      notes.push("YouTube hides countries with only a few views, so these add up to less than your total.");
+      if (c.subs_gained) notes.push(n(c.subs_gained) + " new " + plural(c.subs_gained, "subscriber") + " in these countries over the 28 days.");
+    }
+    if (c.id === "instagram" || c.id === "facebook") notes.push("Only followers whose country " + meta.name + " knows are counted.");
+    if (c.id === "tiktok" && c.unlisted_share) notes.push("TikTok Studio lists only its top countries; the other " + sharePct(c.unlisted_share) + " aren’t broken down.");
+    if (notes.length) html += '<p class="channel-note">' + esc(notes.join(" ")) + "</p>";
+    return html + foot + "</article>";
+  }
+
+  function checkedLine(c) {
+    if (c.id === "tiktok") {
+      var day = c.day || c.span; if (!day) return "";
+      var stale = state.platforms && state.platforms.today && day < shiftDayStr(state.platforms.today, -8);
+      return "From TikTok Studio, checked " + dayLabel(day) + (stale ? ". Due for this week’s check." : ". Checked every Friday.");
+    }
+    var at = c.last_attempt_at || c.fetched_at;
+    return at ? "Last checked " + fmtDateTime(at) + "." : "";
+  }
+  function shiftDayStr(day, delta) { var d = new Date(day + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + delta); return d.toISOString().slice(0, 10); }
+
+  function renderCountries(cn) {
+    var box = $("#where"); box.setAttribute("aria-busy", "false");
+    if (!cn || !cn.available) {
+      $("#where-all").innerHTML = '<p class="none">Country numbers aren’t switched on yet. They appear after the next update to the data service.</p>';
+      $("#where-apps").innerHTML = "";
+      return;
+    }
+    var list = cn.platforms || [];
+    $("#where-apps").innerHTML = list.map(whereCard).join("");
+
+    var all = cn.combined || {}, rows = all.rows || [];
+    var hint = $("#where-all-hint"), el = $("#where-all");
+    var used = (all.based_on || []).map(function (b) { return b.id; });
+    var withRows = list.filter(function (c) { return c.rows && c.rows.length; }).map(function (c) { return c.id; });
+    var left = PLATFORMS.map(function (p) { return p.id; }).filter(function (id) { return used.indexOf(id) < 0; });
+    if (!rows.length) {
+      hint.textContent = "Your top countries across every app that shares them.";
+      el.innerHTML = '<p class="none">' + (withRows.length
+        ? "Nothing to combine yet: " + esc(listNames(withRows)) + " shared countries but no follower count to weigh them by."
+        : "Nothing to combine yet. This fills in as soon as one app shares its countries.") + "</p>";
+      return;
+    }
+    hint.textContent = "An estimate: each app’s countries are weighted by how many followers it has, then added up. " +
+      (used.indexOf("youtube") >= 0 ? "YouTube counts where views come from, because it doesn’t share subscribers by country. " : "") +
+      "Based on " + listNames(used) + (left.length ? "; " + listNames(left) + " " + (left.length === 1 ? "isn’t" : "aren’t") + " included yet." : ".");
+    var html = whereRows(rows, "All apps together: estimated followers by country", function (r) {
+      var e = r.estimate; var about = e < 1 ? "under 1 follower" : "about " + n(Math.round(e)) + " " + plural(Math.round(e), "follower");
+      return { bar: r.share, num: sharePct(r.share), unit: about };
+    });
+    var tails = [];
+    if (all.more_countries) tails.push("+ " + n(all.more_countries) + " more " + (all.more_countries === 1 ? "country" : "countries") + " (" + sharePct(all.more_share) + ")");
+    if (all.unknown_share) tails.push(sharePct(all.unknown_share) + " in countries the apps don’t list");
+    if (tails.length) html += '<p class="where-more">' + esc(tails.join(" · ")) + "</p>";
+    el.innerHTML = html;
   }
 
   var refreshTimer = null;

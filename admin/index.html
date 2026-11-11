@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css">
-<link rel="stylesheet" href="/assets/admin.css">
+<link rel="stylesheet" href="/assets/admin.css?v=2">
 </head>
 <body class="admin">
 <a class="skip" href="#main">Skip to the numbers</a>
@@ -77,6 +77,23 @@
           <div class="panel-head"><h2 id="posts-title">Top posts</h2><p class="hint" id="posts-hint">Most-viewed posts across the connected apps, from the latest check.</p></div>
           <div id="posts" class="table-wrap"></div>
         </section>
+      </section>
+
+      <!-- Where your followers are: countries per app (daily check; TikTok copied from TikTok Studio every Friday) -->
+      <section id="where-section" class="dash-section" aria-labelledby="where-title">
+        <div class="section-head">
+          <div>
+            <h2 id="where-title">Where your followers are</h2>
+            <p class="meta" id="where-hint">Which countries your audience is in, app by app.</p>
+          </div>
+        </div>
+        <div id="where" aria-live="polite" aria-busy="true">
+          <section class="panel where-all" aria-labelledby="where-all-title">
+            <div class="panel-head"><h3 id="where-all-title">All apps together</h3><p class="hint" id="where-all-hint">Your top countries across every app that shares them.</p></div>
+            <div id="where-all"></div>
+          </section>
+          <div id="where-apps" class="where-apps"></div>
+        </div>
       </section>
 
       <!-- Your website: visits counted on fineprinteagle.com -->
@@ -169,6 +186,6 @@
 
 <div id="tooltip" class="tooltip" hidden></div>
 <script src="/assets/config.js"></script>
-<script src="/assets/admin.js" defer></script>
+<script src="/assets/admin.js?v=2" defer></script>
 </body>
 </html>
