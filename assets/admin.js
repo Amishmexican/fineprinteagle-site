@@ -34,6 +34,18 @@
   function countryName(code) {
     try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code) || code; } catch (e) { return code; }
   }
+  // The 50 states plus Washington, D.C. (Puerto Rico counts as its own country in every source, so it's in the country lists.)
+  var US_STATE_NAMES = {
+    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut",
+    DE: "Delaware", DC: "Washington, D.C.", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+    IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+    NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+    NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+    RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+    VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming"
+  };
+  function stateName(code) { return US_STATE_NAMES[code] || code; }
   function fmtDate(iso, opts) {
     if (!iso) return "–";
     try { return new Date(iso).toLocaleString("en-US", Object.assign({ timeZone: state.tz, month: "short", day: "numeric", year: "numeric" }, opts || {})); } catch (e) { return iso; }
@@ -136,7 +148,7 @@
     var area = $("#summary-area"); area.setAttribute("aria-busy", String(on)); area.classList.toggle("loading", on);
     if (on) {
       $$(".tile-num").forEach(function (el) { el.textContent = ""; });
-      ["#trend", "#sources", "#clicks", "#devices", "#countries", "#pages"].forEach(function (s) { $(s).innerHTML = '<div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div>'; });
+      ["#trend", "#sources", "#clicks", "#devices", "#countries", "#us-states", "#pages"].forEach(function (s) { $(s).innerHTML = '<div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div>'; });
     }
   }
 
@@ -149,7 +161,7 @@
       setLoading(false);
       if (unauthorized(err)) return;
       $$(".tile-num").forEach(function (el) { el.textContent = "–"; });
-      ["#trend", "#sources", "#clicks", "#devices", "#countries", "#pages"].forEach(function (s) { $(s).innerHTML = ""; });
+      ["#trend", "#sources", "#clicks", "#devices", "#countries", "#us-states", "#pages"].forEach(function (s) { $(s).innerHTML = ""; });
       notice("Couldn’t load the numbers. " + esc(err.status ? err.message : "The data service did not answer."), "error", true);
     });
   }
@@ -179,7 +191,22 @@
     renderRows("#clicks", d.clicks, function (r) { return { name: clickLabel(r.target), value: r.clicks, unit: "click" }; }, "No button taps in this range.");
     renderRows("#devices", d.devices, function (r) { return { name: DEVICE_LABELS[r.device] || cap(r.device), value: r.visitors, unit: "visitor" }; }, "Nothing yet.");
     renderRows("#countries", d.countries, function (r) { return { name: countryName(r.country), value: r.visitors, unit: "visitor" }; }, "Countries show up once the service runs on Cloudflare.");
+    renderVisitorStates(d);
     renderRows("#pages", d.pages, function (r) { return { name: PAGE_LABELS[r.path] || r.path, value: r.pageviews, unit: "view" }; }, "Nothing yet.");
+  }
+
+  // Website visitors by US state (Cloudflare tells the data service the state; only US visits get one).
+  function renderVisitorStates(d) {
+    var us = d.us_states || { available: false, rows: [] }, hint = $("#us-states-hint");
+    var empty;
+    if (!us.available) empty = "US states show up after the next update to the data service.";
+    else if (!us.us_visitors) empty = (d.countries && d.countries.length) ? "No visitors from the US " + RANGE_WORDS[d.range] + "." : "States show up once the service runs on Cloudflare.";
+    else if (!us.with_state) empty = "No states yet for these US visits. States are counted from the latest update of the data service on.";
+    hint.textContent = us.available && us.with_state && us.with_state < us.us_visitors
+      ? "Visitors in the United States, by state. " + n(us.with_state) + " of " + n(us.us_visitors) + " US visitors have a known state."
+      : "Visitors in the United States, by state.";
+    renderRows("#us-states", empty ? [] : us.rows, function (r) { return { name: stateName(r.region), value: r.visitors, unit: "visitor" }; }, empty || "Nothing yet.");
+    var ol = $("#us-states ol"); if (ol) ol.setAttribute("aria-label", "Website visitors by US state");
   }
 
   function renderRows(sel, rows, map, emptyText) {
@@ -428,6 +455,7 @@
     el.innerHTML = list.map(channelCard).join("");
     bindSparks(el, list);
     renderCountries(d.countries);
+    renderStates(d.us_states);
 
     var anyOn = list.some(function (p) { return p.state === "ok"; });
     var hint = "Followers and views on each app, checked every morning around 5 am Central.";
@@ -493,6 +521,7 @@
   }
 
   function whereLoading() {
+    statesLoading();
     var box = $("#where"); box.setAttribute("aria-busy", "true");
     $("#where-all").innerHTML = '<div class="skel"></div><div class="skel" style="width:75%"></div><div class="skel" style="width:55%"></div>';
     $("#where-apps").innerHTML = PLATFORMS.map(function (p) {
@@ -500,23 +529,28 @@
     }).join("");
   }
 
-  function whereOffCard(meta, state, title, sub, extra) {
-    return '<article class="channel where-card is-off" data-platform="' + meta.id + '" data-state="' + esc(state) + '"><div class="channel-head"><h3 class="channel-name">' + esc(meta.name) + "</h3></div>" +
+  function whereOffCard(meta, state, title, sub, extra, tag) {
+    tag = tag || "h3";
+    return '<article class="channel where-card is-off" data-platform="' + meta.id + '" data-state="' + esc(state) + '"><div class="channel-head"><' + tag + ' class="channel-name">' + esc(meta.name) + "</" + tag + "></div>" +
       '<p class="off-title">' + esc(title) + '</p><p class="off-sub">' + esc(sub) + "</p>" + (extra || "") + "</article>";
   }
 
   function whereError(message) {
+    statesError("Couldn’t load the state numbers. The data service did not answer.");
     $("#where").setAttribute("aria-busy", "false");
     $("#where-all").innerHTML = '<p class="none">' + esc(message) + "</p>";
     $("#where-apps").innerHTML = PLATFORMS.map(function (p) { return whereOffCard(p, "off", "Couldn’t load", "The data service did not answer. Try again in a minute."); }).join("");
   }
 
   // One list of countries with a proportional bar (same look as the website's Top countries).
+  // Rows carry either a country code (r.country) or a US state code (r.region).
   function whereRows(rows, label, map) {
     var max = Math.max.apply(null, rows.map(function (r) { return map(r).bar || 0; })) || 1;
     return '<ol class="rows where-rows" aria-label="' + esc(label) + '">' + rows.map(function (r) {
       var m = map(r); var w = Math.max(2, Math.round(((m.bar || 0) / max) * 100));
-      return '<li class="row" style="--w:' + w + '%" data-country="' + esc(r.country) + '"><span class="name">' + esc(countryName(r.country)) + (m.sub ? "<small>" + esc(m.sub) + "</small>" : "") +
+      var place = r.region ? ' data-region="' + esc(r.region) + '"' : ' data-country="' + esc(r.country) + '"';
+      var name = r.region ? stateName(r.region) : countryName(r.country);
+      return '<li class="row" style="--w:' + w + '%"' + place + '><span class="name">' + esc(name) + (m.sub ? "<small>" + esc(m.sub) + "</small>" : "") +
         '</span><span class="num">' + esc(m.num) + (m.unit ? "<small>" + esc(m.unit) + "</small>" : "") + "</span></li>";
     }).join("") + "</ol>";
   }
@@ -626,6 +660,112 @@
     if (all.more_countries) tails.push("+ " + n(all.more_countries) + " more " + (all.more_countries === 1 ? "country" : "countries") + " (" + sharePct(all.more_share) + ")");
     if (all.unknown_share) tails.push(sharePct(all.unknown_share) + " in countries the apps don’t list");
     if (tails.length) html += '<p class="where-more">' + esc(tails.join(" · ")) + "</p>";
+    el.innerHTML = html;
+  }
+
+  /* ---------- US states (same section, narrowed to the United States) ---------- */
+  var STATES_WHERE = {
+    youtube: { basis: "Where your US views come from, last 28 days", unit: "view",
+      needs: "YouTube’s state report needs the same one-time owner sign-in as its country report (see DEPLOY.md). Your other numbers aren’t affected." },
+    instagram: { basis: "US followers by state, from your top cities", unit: "follower", needs: WHERE.instagram.needs },
+    facebook: { basis: "US Page followers by state, from your top cities", unit: "follower", needs: WHERE.facebook.needs },
+    tiktok: { basis: "", unit: "follower", needs: "" }
+  };
+
+  function statesLoading() {
+    $("#where-states").setAttribute("aria-busy", "true");
+    $("#states-all").innerHTML = '<div class="skel"></div><div class="skel" style="width:75%"></div><div class="skel" style="width:55%"></div>';
+    $("#states-apps").innerHTML = PLATFORMS.map(function (p) {
+      return '<article class="channel where-card loading-card"><div class="channel-head"><h4 class="channel-name">' + esc(p.name) + '</h4></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:60%"></div></article>';
+    }).join("");
+  }
+  function statesError(message) {
+    $("#where-states").setAttribute("aria-busy", "false");
+    $("#states-all").innerHTML = '<p class="none">' + esc(message) + "</p>";
+    $("#states-apps").innerHTML = PLATFORMS.map(function (p) { return whereOffCard(p, "off", "Couldn’t load", "The data service did not answer. Try again in a minute.", "", "h4"); }).join("");
+  }
+
+  function stateCard(c) {
+    var meta = PLATFORM_BY_ID[c.id] || { id: c.id, name: cap(c.id) };
+    var w = STATES_WHERE[c.id] || { basis: "Audience by state", unit: "follower", needs: "" };
+    var f = c.followers, min = (state.platforms && state.platforms.countries && state.platforms.countries.min_followers) || 100;
+    var have = f == null ? "" : " (you have " + n(f) + ")";
+    var when = checkedLine(c);
+    var foot = when ? '<p class="where-checked">' + esc(when) + "</p>" : "";
+    var off = function (st, title, sub) { return whereOffCard(meta, st, title, sub, st === "not_connected" || st === "pending" || st === "unsupported" ? "" : foot, "h4"); };
+    var cities = c.cities && c.cities.total ? c.cities : null;
+
+    if (c.state === "unsupported") return off(c.state, "Not shared", "TikTok Studio shows countries only, not US states.");
+    if (c.state === "not_connected") return off(c.state, "Not connected yet", w.needs);
+    if (c.state === "pending") return off(c.state, "Not checked yet", "Set up. States arrive with the next morning check; tap Refresh now to check sooner.");
+    if (c.state === "below_threshold") {
+      if (c.id === "instagram") return off(c.state, "Not yet", "Instagram shares follower cities once you reach " + n(min) + " followers" + have + ".");
+      return off(c.state, "Not yet", "Facebook shares follower cities once your Page reaches " + n(min) + " followers" + have + ".");
+    }
+    if (c.state === "empty") {
+      if (c.id === "youtube") return off(c.state, "No states yet", "YouTube hasn’t reported any US states for the last 28 days. It hides states with only a few views.");
+      if (c.id === "facebook" && !f) return off(c.state, "No followers yet", "States show up here once people follow the Page.");
+      if (cities) return off(c.state, "No US states yet", "None of your top " + n(cities.total) + " " + (cities.total === 1 ? "city" : "cities") + " on " + meta.name + " are in the US yet.");
+      return off(c.state, "No US states yet", meta.name + " didn’t share any cities at the last check.");
+    }
+    var problem = c.state === "reconnect"
+      ? "YouTube’s permission was removed or ran out. Sign in again to bring the state report back (steps in DEPLOY.md)."
+      : c.state === "error" ? "The last check didn’t work" + (c.error ? ": " + c.error : ".") : "";
+    if (!(c.rows && c.rows.length)) {
+      if (!problem) return off(c.state, "No US states yet", meta.name + " didn’t share any states at the last check.");
+      return off(c.state, c.state === "reconnect" ? "Needs a new sign-in" : "Couldn’t check", problem);
+    }
+
+    var html = '<article class="channel where-card" data-platform="' + meta.id + '" data-state="' + esc(c.state) + '"><div class="channel-head"><h4 class="channel-name">' + esc(meta.name) +
+      '</h4><p class="where-basis">' + esc(w.basis) + "</p></div>";
+    if (problem) html += '<p class="where-alert" role="note">' + esc(problem + " Showing the list from " + dayLabel(c.day) + ".") + "</p>";
+    html += whereRows(c.rows, meta.name + ": " + w.basis, function (r) {
+      if (c.id === "youtube") {
+        return { bar: r.value, num: n(r.value), unit: plural(r.value, "view") + " · " + sharePct(r.share), sub: r.minutes != null ? n(r.minutes) + " " + plural(r.minutes, "minute") + " watched" : "" };
+      }
+      return { bar: r.value, num: n(r.value), unit: plural(r.value, "follower") + " · " + sharePct(r.share) };
+    });
+    if (c.more_states) html += '<p class="where-more">+ ' + n(c.more_states) + " more " + (c.more_states === 1 ? "state" : "states") + " (" + esc(n(c.more_value) + " " + plural(c.more_value, w.unit)) + ")</p>";
+    var notes = [];
+    if (c.id === "youtube") notes.push("YouTube hides states with only a few views, so these add up to less than your US views.");
+    if (cities) notes.push("Based on your top " + n(cities.total) + " " + (cities.total === 1 ? "city" : "cities") + " on " + meta.name + ", " + n(cities.in_us) + " of them in the US. Followers in smaller towns aren’t counted.");
+    if (notes.length) html += '<p class="channel-note">' + esc(notes.join(" ")) + "</p>";
+    return html + foot + "</article>";
+  }
+
+  function renderStates(st) {
+    var box = $("#where-states"); box.setAttribute("aria-busy", "false");
+    var hint = $("#states-all-hint"), el = $("#states-all");
+    if (!st || !st.available) {
+      hint.textContent = "Your top US states across every app that shares them.";
+      el.innerHTML = '<p class="none">US state numbers aren’t switched on yet. They appear after the next update to the data service.</p>';
+      $("#states-apps").innerHTML = "";
+      return;
+    }
+    var list = st.platforms || [];
+    $("#states-apps").innerHTML = list.map(stateCard).join("");
+
+    var all = st.combined || {}, rows = all.rows || [];
+    var used = (all.based_on || []).map(function (b) { return b.id; });
+    var withRows = list.filter(function (c) { return c.rows && c.rows.length; }).map(function (c) { return c.id; });
+    var noStates = list.filter(function (c) { return c.state === "unsupported"; }).map(function (c) { return c.id; });
+    var left = PLATFORMS.map(function (p) { return p.id; }).filter(function (id) { return used.indexOf(id) < 0 && noStates.indexOf(id) < 0; });
+    if (!rows.length) {
+      hint.textContent = "Your top US states across every app that shares them.";
+      el.innerHTML = '<p class="none">' + (withRows.length
+        ? "Nothing to combine yet: " + esc(listNames(withRows)) + " shared states, but there’s no follower count or US share to weigh them by yet."
+        : "Nothing to combine yet. This fills in as soon as one app shares US states.") + "</p>";
+      return;
+    }
+    hint.textContent = "An estimate: each app’s states are weighted by how many US followers it has (its followers times its share in the US), then added up. " +
+      (used.indexOf("youtube") >= 0 ? "YouTube counts where US views come from. " : "") +
+      "Based on " + listNames(used) + (left.length ? "; " + listNames(left) + " " + (left.length === 1 ? "isn’t" : "aren’t") + " included yet" : "") +
+      (noStates.length ? (left.length ? "; " : ". ") + listNames(noStates) + " doesn’t share states." : ".");
+    var html = whereRows(rows, "All apps together: estimated US followers by state", function (r) {
+      var e = r.estimate; var about = e < 1 ? "under 1 follower" : "about " + n(Math.round(e)) + " " + plural(Math.round(e), "follower");
+      return { bar: r.share, num: sharePct(r.share), unit: about };
+    });
+    if (all.more_states) html += '<p class="where-more">' + esc("+ " + n(all.more_states) + " more " + (all.more_states === 1 ? "state" : "states") + " (" + sharePct(all.more_share) + ")") + "</p>";
     el.innerHTML = html;
   }
 

@@ -203,3 +203,12 @@ table.posts th.num{ text-align:right; }
 @media (min-width:1000px){ .channels{ grid-template-columns:repeat(4,1fr); } }
 @media (max-width:359px){ .channels{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion:reduce){ .row::before{ transition:none; } .loading .tile-num::after, .loading .skel{ animation:none; } }
+
+/* US states: a sub-block of "Where your followers are" (same cards and rows as the countries) */
+.admin h4{ font-family:var(--head); font-weight:400; text-transform:uppercase; letter-spacing:.012em; line-height:.98; margin:0; color:var(--cream); }
+.panel-head h4{ font-size:22px; line-height:1; color:var(--cream); }
+.where-states{ margin-top:22px; padding-top:20px; border-top:1px solid rgba(217,168,74,.14); }
+.where-sub-head{ margin-bottom:14px; }
+.where-sub-head h3{ font-size:clamp(24px,5vw,30px); color:var(--cream); }
+.where-sub-head .meta{ color:var(--muted); font-size:15px; margin:6px 0 0; }
+.where-card h4.channel-name{ font-family:var(--head); text-transform:uppercase; letter-spacing:.14em; font-size:12px; color:var(--gold); line-height:1.2; }
